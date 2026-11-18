@@ -6,3 +6,8 @@ input,select,textarea,.surface,.twocol>*,.mission-layout>*,.workdetails>*{min-wi
 @media(min-width:1101px){.expansion-layout{grid-template-columns:420px minmax(0,1fr)}}
 
 .topnav{display:flex;flex-wrap:wrap}.topnav a{flex:1 1 10%;min-width:125px}.checkline{display:flex;align-items:center;gap:10px}.checkline input{width:auto}textarea{min-height:76px;width:100%;padding:10px;border:1px solid var(--line);font:inherit;background:#fff}.expansion-layout article.surface{margin-bottom:14px}@media(max-width:600px){.topnav a{min-width:30%;font-size:12px}}
+.badge.paused{color:var(--danger);border-color:oklch(60% .12 35);background:oklch(92% .05 35)}
+.badge.pending{color:var(--ochre);border-color:var(--ochre);background:oklch(93% .06 80)}
+.badge.active{color:var(--green);border-color:oklch(65% .08 135)}
+.badge.used{color:var(--muted)}
+.surface .evidence{background:oklch(92% .035 90);border:1px solid var(--line);border-top:1px solid var(--line);padding:15px;margin:18px 0;font-size:12px;line-height:1.9}

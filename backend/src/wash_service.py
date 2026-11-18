@@ -34,12 +34,13 @@ def dispatch(db,key,user):
     # Lock the source budget and its dependent mission in one transaction.
     mission.available_liters=block.water_liters
     block.water_liters=round(block.water_liters-mission.water_liters,3);block.cleaning_state='washing'
-    mission.status='dispatched';mission.dispatched_at=datetime.utcnow();survey.state='scheduled'
+    mission.status='dispatched';mission.execution_state='active';mission.dispatched_at=datetime.utcnow();survey.state='scheduled'
     audit(db,user,f'清洗任务 {key} 派工，扣减{mission.water_liters}L，余{block.water_liters}L');db.commit();return mission
 
 def retest(db,key,body,user):
     mission=require(db,WashMission,key,True)
     if mission.status not in ['dispatched','retested']:raise HTTPException(409,'须先派工，已验收任务不可更改复测')
+    if mission.execution_state!='active':raise HTTPException(409,'任务处于暂停待接单状态，续作恢复作业后才能登记复测')
     survey=require(db,SoilingSurvey,mission.survey_id,True)
     if body.post_kw>survey.capacity_kw*1.2:raise HTTPException(409,'复测功率超出额定容量120%，请核对读数')
     mission.post_kw=body.post_kw;mission.post_irradiance=body.post_irradiance
@@ -52,9 +53,19 @@ def accept(db,key,user):
     mission=require(db,WashMission,key,True)
     if mission.status!='retested' or mission.verified_gain is None:raise HTTPException(409,'没有清洗后复测记录，不可验收')
     if mission.verified_gain<=0:raise HTTPException(409,'复测未见正向功率收益，请排查遮挡或重新复测')
+    if mission.execution_state!='active':raise HTTPException(409,'任务仍暂停待接单，不可验收')
     survey=require(db,SoilingSurvey,mission.survey_id,True);block=require(db,ArrayBlock,survey.block_id,True)
     mission.status='accepted';mission.accepted_at=datetime.utcnow();survey.state='closed'
     block.cleaning_state='ready';block.last_cleaned=mission.accepted_at
+    from .operations_models import WorkPermit
+    # 未消费的在办许可作废；暂停许可若已挂分段实耗，恢复 used 作为已消费凭证。
+    open_permits=db.scalars(select(WorkPermit).where(WorkPermit.mission_id==mission.id,WorkPermit.state.in_(['signed','paused','pending']))).all()
+    from .execution_models import WorkSegment
+    for p in open_permits:
+        if p.state in ('signed','pending'):p.state='void'
+        else:
+            has_segments=db.scalar(select(WorkSegment.id).where(WorkSegment.permit_id==p.id).limit(1))
+            p.state='used' if has_segments else 'void'
     # Earlier pre-wash readings and their draft plans no longer represent the cleaned array.
     old=db.scalars(select(SoilingSurvey).where(SoilingSurvey.block_id==block.id,SoilingSurvey.id!=survey.id,SoilingSurvey.state.in_(['recorded','assessed','blocked','evaluating']))).all()
     for reading in old:

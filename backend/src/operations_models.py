@@ -13,7 +13,7 @@ class WorkPermit(Base):
     __tablename__='work_permits'
     __table_args__=(CheckConstraint('minutes>0 AND wind_mps>=0'),)
     id:Mapped[int]=mapped_column(primary_key=True)
-    mission_id:Mapped[int]=mapped_column(ForeignKey('wash_missions.id'),unique=True)
+    mission_id:Mapped[int]=mapped_column(ForeignKey('wash_missions.id'),index=True)
     crew_id:Mapped[int]=mapped_column(ForeignKey('wash_crews.id'))
     work_date:Mapped[date]=mapped_column(Date)
     minutes:Mapped[int]=mapped_column()
@@ -21,6 +21,11 @@ class WorkPermit(Base):
     isolation:Mapped[bool]=mapped_column()
     state:Mapped[str]=mapped_column(String(24),default='draft')
     signed_by:Mapped[str]=mapped_column(String(120),default='')
+    # v4：跨日分段执行。初始许可initial；续作许可continuation挂在parent_id下。
+    kind:Mapped[str]=mapped_column(String(24),default='initial')
+    parent_id:Mapped[int|None]=mapped_column(ForeignKey('work_permits.id'),nullable=True)
+    predicted_minutes:Mapped[int|None]=mapped_column(nullable=True)
+    prediction_evidence:Mapped[dict|None]=mapped_column(JSON,nullable=True)
 class WastewaterRecord(Base):
     __tablename__='wastewater_records'
     __table_args__=(CheckConstraint('recovered_liters>=0 AND recovered_liters<=used_liters AND used_liters>0'),)

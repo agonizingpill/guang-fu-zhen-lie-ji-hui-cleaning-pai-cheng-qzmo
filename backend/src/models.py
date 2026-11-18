@@ -48,6 +48,7 @@ class WashMission(Base):
     water_liters:Mapped[float]=mapped_column(Float)
     available_liters:Mapped[float]=mapped_column(Float)
     status:Mapped[str]=mapped_column(String(24),default='draft')
+    execution_state:Mapped[str]=mapped_column(String(24),default='active')
     post_kw:Mapped[float|None]=mapped_column(Float,nullable=True)
     post_irradiance:Mapped[float|None]=mapped_column(Float,nullable=True)
     normalized_kw:Mapped[float|None]=mapped_column(Float,nullable=True)

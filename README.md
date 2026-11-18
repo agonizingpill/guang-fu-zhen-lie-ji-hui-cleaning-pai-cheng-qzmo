@@ -106,3 +106,21 @@ MIT，见LICENSE。
 新增代码按实体、输入约束、路由、许可/废水/结算职责及3个页面组织。历史v1与expansion证据保留，第三轮证据在test-artifacts/gb-1024/v3/。作业许可按日容量预留，不模拟逐分钟班次；本地废水联单不接环保系统，合同凭据不触发收付款。
 
 V3 已知范围补充：每任务一张作业许可；撤销为终止办理，需重新创建任务，当前不支持同任务重办许可。草稿许可可在签发前修订；撤销会释放班组容量。
+
+
+## 第四轮扩展：跨日分段执行与剩余工时预测
+
+山地清洗常因收工跨日，旧口径把许可全部工时记在派工日。本轮登记**分段实耗**并按班次认账，页面「跨日分段执行」集中办理执行、暂停、待接单与续作（共10个业务页面）。
+
+- **分段实耗 `WorkSegment`**：每段记录认账许可、班组、作业日期、实耗分钟与实耗水量，分段单号唯一；同一许可每日唯一分段，同一任务同一作业日只认一个班次（换班并发时禁止两方重复认账）。累计实耗水量不得超过任务计划水量。迟报的实耗仍归原班组原日期，并即时重算该班组当日可用工时。
+- **暂停保留**：暂停后初始许可 `used→paused`、任务 `execution_state=active→paused`；已耗水与已耗工时原样保留，原班组未耗工时（许可分钟−实耗）即时释放。暂停态禁止复测与验收。
+- **次日续作换班**：可指定新班组申请 `continuation` 续作许可（挂 `parent_id`），新班组主管承接（approve）后才占容量并恢复作业；续作派工沿用任务已扣水量预算，**不重复扣水**。
+- **容量与待接单**：班组容量同时按「预留（signed/used 许可分钟）」与「实耗（分段分钟）」核算，实耗超过日容量即超额，直接阻止该班组同日新签许可。续作申请时容量不足则许可保留 `pending` 待接单：不扣水、不占工时；中断后重试不重复占额（同任务 pending/signed 续作唯一、承接审批幂等）。
+- **剩余工时预测 `duration_model.py`**：以已完工（accepted）且带分段实耗的任务为训练样本，特征为装机容量、面积、坡度、计划水量、目测积灰（不用实耗本身），RandomForest 100树/max_depth8/random_state42，按25%独立留出集报告留出 MAE 与百分比，训练 MAE 与留出 MAE 分开返回。已完工样本少于12条（划分后训练少于8条）不出预测，续作余量转人工核定，证据写入许可 `prediction_evidence`。
+- 验收时未消费的在办许可作废；暂停许可若已挂分段实耗则恢复 `used` 作为已消费凭证。
+
+新增接口：`GET/POST /segments`、`POST /missions/{id}/pause`、`POST /continuations`、`POST /continuations/{id}/approve|reject|resume`、`GET /missions/{id}/duration-prediction`。计划员/主管可登记分段、暂停、申请与恢复续作；承接审批仅主管；观察员只读。代码为 `execution_models.py/execution_schemas.py/execution_routes.py/execution_service.py/duration_model.py/schema_upgrade.py`，新页面 `pages/execution.js`。
+
+结构升级：`work_permits.mission_id` 由唯一改为普通索引（同任务允许初始+多张续作许可），新增 `kind/parent_id/predicted_minutes/prediction_evidence`；`wash_missions` 新增 `execution_state`；新建 `work_segments` 表（历史无凭证任务的 `permit_id` 可空）。`schema_upgrade.py` 在启动 `create_all` 后幂等补列/删旧唯一索引，无在线迁移工具，既有数据保留。种子新增18条已完工训练任务（含跨日双段）及历史任务补录分段，按自然键幂等。
+
+容量加锁沿用 Mission→Permit→Crew 顺序与 READ COMMITTED，行锁内重算预留与实耗。验证证据在 `test-artifacts/gb-1024/v4/`：服务层7项（分段/超水、暂停释放、换班待接单不扣水、迟报超额阻签、暂停阻复测、人工核定→留出MAE、一班次认账护栏）、HTTP全链路剧本、v3旧库→v4幂等升级三套测试，基于 SQLite 内存库与 TestClient，不依赖 Docker/MySQL/Redis。

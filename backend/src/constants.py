@@ -18,3 +18,16 @@ class MissionState(StrEnum):
     RETESTED='retested'
     ACCEPTED='accepted'
     SUPERSEDED='superseded'
+class MissionExecution(StrEnum):
+    ACTIVE='active'
+    PAUSED='paused'
+class PermitKind(StrEnum):
+    INITIAL='initial'
+    CONTINUATION='continuation'
+class PermitState(StrEnum):
+    DRAFT='draft'
+    SIGNED='signed'
+    USED='used'
+    PAUSED='paused'
+    PENDING='pending'
+    VOID='void'
